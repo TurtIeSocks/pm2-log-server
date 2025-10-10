@@ -1,0 +1,49 @@
+{
+  "name": "pm2-log-streamer",
+  "version": "1.0.0",
+  "description": "PM2 plugin for streaming application logs via HTTP",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/index.js"
+  },
+  "keywords": [
+    "pm2",
+    "plugin",
+    "logs",
+    "streaming"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@pm2/io": "6.1.0",
+    "pm2": "6.0.13",
+    "express": "5.1.0",
+    "cors": "2.8.5",
+    "ws": "8.18.3"
+  },
+  "devDependencies": {
+    "@types/node": "24.7.1",
+    "@types/express": "5.0.3",
+    "@types/cors": "2.8.19",
+    "@types/ws": "8.18.1",
+    "typescript": "5.9.3"
+  },
+  "config": {
+    "port": 9615,
+    "host": "0.0.0.0",
+    "corsEnabled": false,
+    "maxClients": 50,
+    "logBufferSize": 100,
+    "includeTimestamp": true
+  },
+  "apps": [
+    {
+      "name": "pm2-log-streamer",
+      "script": "dist/index.js",
+      "instances": 1,
+      "exec_mode": "fork"
+    }
+  ]
+}
