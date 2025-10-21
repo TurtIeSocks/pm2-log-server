@@ -5,7 +5,7 @@ import { LogManager } from './log-manager'
 import { LogServer } from './server'
 import type { Packet, PluginConfig, ProcessInfo } from './types'
 
-class PM2LogStreamerPlugin {
+class PM2LogServerPlugin {
   private logManager: LogManager
   private server: LogServer
   private config = io.getConfig() as PluginConfig
@@ -17,7 +17,7 @@ class PM2LogStreamerPlugin {
   }
 
   async start(): Promise<void> {
-    console.log('Starting PM2 Log Streamer Plugin...')
+    console.log('Starting PM2 Log Server Plugin...')
     console.log('Configuration:', JSON.stringify(this.config, null, 2))
 
     // Connect to PM2
@@ -139,7 +139,7 @@ class PM2LogStreamerPlugin {
   }
 
   private shutdown(): void {
-    console.log('\nShutting down PM2 Log Streamer...')
+    console.log('\nShutting down PM2 Log Server...')
 
     if (this.bus) {
       this.bus.close()
@@ -152,7 +152,7 @@ class PM2LogStreamerPlugin {
 }
 
 // Start the plugin
-const plugin = new PM2LogStreamerPlugin()
+const plugin = new PM2LogServerPlugin()
 plugin.start().catch((err) => {
   console.error('Failed to start plugin:', err)
   process.exit(1)

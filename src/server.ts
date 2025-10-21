@@ -129,7 +129,7 @@ export class LogServer {
       // Send welcome message
       this.sendMessage(ws, {
         type: 'connected',
-        message: 'Connected to PM2 Log Streamer',
+        message: 'Connected to PM2 Log Server',
         authRequired: !!this.config.authToken,
         processes: this.logManager.getWatchedProcesses(),
       })
@@ -379,7 +379,7 @@ export class LogServer {
     return new Promise((resolve) => {
       this.httpServer.listen(this.config.port, this.config.host, () => {
         console.log(
-          `PM2 Log Streamer running on http://${this.config.host}:${this.config.port}`,
+          `PM2 Log Server running on http://${this.config.host}:${this.config.port}`,
         )
         console.log(
           `WebSocket endpoint: ws://${this.config.host}:${this.config.port}/ws`,

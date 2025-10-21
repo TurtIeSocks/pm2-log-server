@@ -1,5 +1,5 @@
 {
-  "name": "pm2-log-streamer",
+  "name": "pm2-log-server",
   "version": "1.0.0",
   "description": "PM2 plugin for streaming application logs via WS",
   "keywords": [
@@ -14,7 +14,7 @@
   "main": "dist/index.js",
   "repository": {
     "type": "git",
-    "url": "https://github.com/TurtIeSocks/pm2-logs-server.git"
+    "url": "https://github.com/TurtIeSocks/pm2-log-server.git"
   },
   "scripts": {
     "build": "tsc",
@@ -46,7 +46,7 @@
   },
   "apps": [
     {
-      "name": "pm2-log-streamer",
+      "name": "pm2-log-server",
       "script": "dist/index.js",
       "instances": 1,
       "exec_mode": "fork"

@@ -1,4 +1,4 @@
-# PM2 Log Streamer Plugin
+# PM2 Log Server Plugin
 
 A PM2 plugin that streams application logs via WebSocket using the native PM2 bus API.
 
@@ -53,11 +53,11 @@ pm2 start ecosystem.config.js
 This plugin has several configurable values that you must set using PM2's build in commands.
 
 ```bash
-  pm2 set pm2-log-streamer:authToken some-secure-token
-  pm2 set pm2-log-streamer:corsEnabled false
-  pm2 set pm2-log-streamer:host 0.0.0.0
-  pm2 set pm2-log-streamer:logBufferSize 100
-  pm2 set pm2-log-streamer:port 9615
+  pm2 set pm2-log-server:authToken some-secure-token
+  pm2 set pm2-log-server:corsEnabled false
+  pm2 set pm2-log-server:host 0.0.0.0
+  pm2 set pm2-log-server:logBufferSize 100
+  pm2 set pm2-log-server:port 9615
 ```
 
 
@@ -264,7 +264,7 @@ const WebSocket = require('ws');
 const ws = new WebSocket('ws://localhost:9615/ws');
 
 ws.on('open', () => {
-  console.log('Connected to PM2 Log Streamer');
+  console.log('Connected to PM2 Log Server');
   
   // Authenticate (if required)
   ws.send(JSON.stringify({
@@ -311,7 +311,7 @@ ws.on('error', (error) => {
 });
 
 ws.on('close', () => {
-  console.log('Disconnected from PM2 Log Streamer');
+  console.log('Disconnected from PM2 Log Server');
 });
 ```
 
@@ -417,10 +417,6 @@ ws.send(JSON.stringify({
 - Check the port is not in use: `lsof -i :9615`
 - Verify firewall settings
 
-### Authentication Failed
-- Ensure `PM2_LOG_STREAMER_AUTH_TOKEN` matches your token
-- Check token is sent correctly in auth message
-
 ### No Logs Received
 - Verify you've subscribed to a process
 - Check the process is running: `pm2 list`
@@ -428,7 +424,7 @@ ws.send(JSON.stringify({
 - Verify filter settings allow the log type
 
 ### Performance Issues
-- Reduce `PM2_LOG_STREAMER_BUFFER_SIZE` if memory is constrained
+- Reduce `config.logBufferSize` if memory is constrained
 - Use `filter` option to reduce log volume
 - Consider using `json: false` for lower bandwidth
 
