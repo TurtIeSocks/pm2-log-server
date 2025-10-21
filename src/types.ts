@@ -21,12 +21,17 @@ export interface LogEntry {
   process: string
 }
 
-export interface ClientOptions {
-  filter: 'all' | 'out' | 'error'
+export interface ClientFormatOptions {
   clean: boolean
   json: boolean
   timestamps: boolean
   log_type: boolean
+}
+
+export interface ClientFilterOptions<Parsed extends boolean> {
+  log_type: 'all' | 'out' | 'error'
+  text: string
+  regex: Parsed extends true ? RegExp | null : string
 }
 
 export interface Packet {
@@ -52,8 +57,9 @@ export interface Packet {
 }
 
 export interface WebSocketMessage {
-  type: 'auth' | 'subscribe' | 'unsubscribe' | 'options' | 'ping'
+  type: 'auth' | 'subscribe' | 'unsubscribe' | 'format' | 'filter' | 'ping'
   token?: string
   process?: string
-  options?: Partial<ClientOptions>
+  format?: Partial<ClientFormatOptions>
+  filter?: Partial<ClientFilterOptions<false>>
 }

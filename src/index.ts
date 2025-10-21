@@ -14,13 +14,11 @@ class PM2LogServerPlugin {
   constructor() {
     this.logManager = new LogManager(this.config.logBufferSize)
     this.server = new LogServer(this.logManager, this.config)
-
   }
 
   async start(): Promise<void> {
     console.log('Starting PM2 Log Server Plugin...')
     console.log('Configuration:', JSON.stringify(this.config, null, 2))
-    // console.log('a', io.getConfig())
 
     // Get list of processes and register them
     await this.refreshProcesses()

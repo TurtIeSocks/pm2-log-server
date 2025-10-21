@@ -272,15 +272,21 @@ ws.on('open', () => {
     token: 'your-secret-token'
   }));
   
-  // Set options
-  ws.send(JSON.stringify({
-    type: 'options',
-    options: {
-      filter: 'all',
-      clean: true,
-      json: true
-    }
-  }));
+  // Set filter
+  ws.send(
+    JSON.stringify({
+      type: 'filter',
+      filter: { log_type: 'all',  text: '', regex: '/abc/gi' },
+    })
+  )
+
+  // Set format
+  ws.send(
+    JSON.stringify({
+      type: 'format',
+      format: { clean: false, json: false, timestamps: false, log_type: false },
+    })
+  )
   
   // Subscribe to a process
   ws.send(JSON.stringify({
@@ -334,16 +340,6 @@ ws.addEventListener('open', () => {
     type: 'subscribe',
     process: '*'
   }));
-  
-  // Set options for clean, non-JSON output
-  ws.send(JSON.stringify({
-    type: 'options',
-    options: {
-      filter: 'all',
-      clean: true,
-      json: false
-    }
-  }));
 });
 
 ws.addEventListener('message', (event) => {
@@ -364,69 +360,6 @@ ws.addEventListener('close', () => {
   console.log('Disconnected');
 });
 ```
-
-## Use Cases
-
-### Monitor Errors Only
-```javascript
-ws.send(JSON.stringify({
-  type: 'options',
-  options: { filter: 'error', clean: true, json: true }
-}));
-
-ws.send(JSON.stringify({
-  type: 'subscribe',
-  process: '*'
-}));
-```
-
-### Plain Text Output for Terminal
-```javascript
-ws.send(JSON.stringify({
-  type: 'options',
-  options: { filter: 'all', clean: false, json: false }
-}));
-```
-
-### Clean Logs for Log Aggregation
-```javascript
-ws.send(JSON.stringify({
-  type: 'options',
-  options: { filter: 'all', clean: true, json: true }
-}));
-```
-
-## How It Works
-
-1. Plugin connects to PM2 daemon
-2. Launches PM2 bus to listen for log events
-3. Registers all running PM2 processes
-4. Listens for `log:out` and `log:err` events from PM2 bus
-5. Buffers recent logs in memory
-6. WebSocket server accepts client connections
-7. Clients authenticate (if token configured)
-8. Clients subscribe to specific processes
-9. Logs are filtered and formatted based on client options
-10. Formatted logs are streamed to subscribed clients
-11. Automatically handles process start/stop/restart events
-
-## Troubleshooting
-
-### Connection Refused
-- Ensure the plugin is running: `pm2 list`
-- Check the port is not in use: `lsof -i :9615`
-- Verify firewall settings
-
-### No Logs Received
-- Verify you've subscribed to a process
-- Check the process is running: `pm2 list`
-- Ensure the process is producing logs
-- Verify filter settings allow the log type
-
-### Performance Issues
-- Reduce `config.logBufferSize` if memory is constrained
-- Use `filter` option to reduce log volume
-- Consider using `json: false` for lower bandwidth
 
 ## License
 

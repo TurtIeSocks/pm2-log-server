@@ -1,5 +1,9 @@
 import ansiRegex from 'ansi-regex'
-import type { ClientOptions, LogEntry } from './types'
+import type {
+  ClientFilterOptions,
+  ClientFormatOptions,
+  LogEntry,
+} from './types'
 
 const ansiPattern = ansiRegex()
 
@@ -9,7 +13,7 @@ export function stripAnsi(text: string): string {
 
 export function formatLog(
   entry: LogEntry,
-  options: ClientOptions,
+  options: ClientFormatOptions,
 ): string {
   const message = options.clean ? stripAnsi(entry.message) : entry.message
 
@@ -24,7 +28,7 @@ export function formatLog(
 
   let prefix = ''
   if (options.timestamps) {
-    prefix+= `[${entry.timestamp}] `
+    prefix += `[${entry.timestamp}] `
   }
   if (options.log_type) {
     prefix += `[${entry.type}] `
@@ -35,10 +39,35 @@ export function formatLog(
 
 export function shouldIncludeLog(
   entry: LogEntry,
-  filter: 'all' | 'out' | 'error',
+  filter: ClientFilterOptions<true>,
 ): boolean {
-  if (filter === 'all') {
-    return true
+  if (filter.log_type !== 'all' && filter.log_type !== entry.type) {
+    return false
   }
-  return entry.type === filter
+  if (
+    filter.text &&
+    !entry.message.toLowerCase().includes(filter.text.toLowerCase())
+  ) {
+    return false
+  }
+  if (filter.regex && !filter.regex.test(entry.message)) {
+    return false
+  }
+  return true
+}
+
+export function parseRegexString(regexStr?: string): RegExp | null {
+  if (regexStr) {
+    const regexMatch = regexStr.match(/^\/(.*)\/([gimsuvy]*)$/)
+
+    if (regexMatch) {
+      const [, pattern, flags] = regexMatch
+
+      return new RegExp(pattern, flags)
+    }
+
+    return new RegExp(regexStr)
+  }
+
+  return null
 }

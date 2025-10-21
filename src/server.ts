@@ -4,18 +4,25 @@ import { createServer, type Server as HTTPServer } from 'http'
 import { WebSocket, WebSocketServer } from 'ws'
 import type { LogManager } from './log-manager'
 import type {
-  ClientOptions,
+  ClientFilterOptions,
+  ClientFormatOptions,
   LogEntry,
   PluginConfig,
   WebSocketMessage,
 } from './types'
-import { formatLog, shouldIncludeLog, stripAnsi } from './utils'
+import {
+  formatLog,
+  parseRegexString,
+  shouldIncludeLog,
+  stripAnsi,
+} from './utils'
 
 interface ClientConnection {
   ws: WebSocket
   authenticated: boolean
   subscriptions: Set<string>
-  options: ClientOptions
+  format: ClientFormatOptions
+  filter: ClientFilterOptions<true>
 }
 
 export class LogServer {
@@ -92,7 +99,9 @@ export class LogServer {
 
       // Apply filter
       if (filter !== 'all') {
-        logs = logs.filter((log) => shouldIncludeLog(log, filter))
+        logs = logs.filter((log) =>
+          shouldIncludeLog(log, { log_type: filter, regex: null, text: '' }),
+        )
       }
 
       // Apply clean
@@ -115,8 +124,12 @@ export class LogServer {
         ws,
         authenticated: !this.config.authToken, // Auto-auth if no token required
         subscriptions: new Set(),
-        options: {
-          filter: 'all',
+        filter: {
+          log_type: 'all',
+          regex: null,
+          text: '',
+        },
+        format: {
           clean: false,
           json: true,
           log_type: false,
@@ -171,8 +184,12 @@ export class LogServer {
           this.handleUnsubscribe(ws, client, message)
           break
 
-        case 'options':
-          this.handleOptions(ws, client, message)
+        case 'format':
+          this.handleFormat(ws, client, message)
+          break
+
+        case 'filter':
+          this.handleFilter(ws, client, message)
           break
 
         case 'ping':
@@ -318,7 +335,7 @@ export class LogServer {
     })
   }
 
-  private handleOptions(
+  private handleFilter(
     ws: WebSocket,
     client: ClientConnection,
     message: WebSocketMessage,
@@ -331,11 +348,43 @@ export class LogServer {
       return
     }
 
-    if (message.options) {
-      client.options = { ...client.options, ...message.options }
+    if (message.filter) {
+      client.filter = {
+        ...client.filter,
+        ...message.filter,
+        regex: parseRegexString(message.filter.regex),
+      }
       this.sendMessage(ws, {
-        type: 'options_updated',
-        options: client.options,
+        type: 'filter_updated',
+        filter: {
+          ...client.filter,
+          regex: client.filter.regex?.source,
+        },
+      })
+    }
+  }
+
+  private handleFormat(
+    ws: WebSocket,
+    client: ClientConnection,
+    message: WebSocketMessage,
+  ): void {
+    if (!client.authenticated) {
+      this.sendMessage(ws, {
+        type: 'error',
+        message: 'Not authenticated',
+      })
+      return
+    }
+
+    if (message.format) {
+      client.format = {
+        ...client.format,
+        ...message.format,
+      }
+      this.sendMessage(ws, {
+        type: 'format_updated',
+        format: client.format,
       })
     }
   }
@@ -355,11 +404,11 @@ export class LogServer {
     client: ClientConnection,
     entry: LogEntry,
   ): void {
-    if (!shouldIncludeLog(entry, client.options.filter)) {
+    if (!shouldIncludeLog(entry, client.filter)) {
       return
     }
 
-    const formatted = formatLog(entry, client.options)
+    const formatted = formatLog(entry, client.format)
 
     if (ws.readyState === WebSocket.OPEN) {
       ws.send(formatted)
