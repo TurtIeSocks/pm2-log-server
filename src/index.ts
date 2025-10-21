@@ -14,22 +14,13 @@ class PM2LogServerPlugin {
   constructor() {
     this.logManager = new LogManager(this.config.logBufferSize)
     this.server = new LogServer(this.logManager, this.config)
+
   }
 
   async start(): Promise<void> {
     console.log('Starting PM2 Log Server Plugin...')
     console.log('Configuration:', JSON.stringify(this.config, null, 2))
-
-    // Connect to PM2
-    await new Promise<void>((resolve, reject) => {
-      pm2.connect((err) => {
-        if (err) {
-          reject(err)
-          return
-        }
-        resolve()
-      })
-    })
+    // console.log('a', io.getConfig())
 
     // Get list of processes and register them
     await this.refreshProcesses()
@@ -151,9 +142,17 @@ class PM2LogServerPlugin {
   }
 }
 
-// Start the plugin
-const plugin = new PM2LogServerPlugin()
-plugin.start().catch((err) => {
-  console.error('Failed to start plugin:', err)
-  process.exit(1)
+io.initModule({}, async (err: Error) => {
+  if (err) {
+    console.error('Failed to init plugin:', err)
+    process.exit(1)
+  }
+
+  try {
+    const plugin = new PM2LogServerPlugin()
+    await plugin.start()
+  } catch (err) {
+    console.error('Failed to start plugin:', err)
+    process.exit(1)
+  }
 })
