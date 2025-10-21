@@ -104,10 +104,10 @@ Response:
 {
   "type": "format",
   "format": {
-    "clean": true, // Strip ANSI color codes (default: false)
-    "json": false, // Return logs as JSON objects (default: true)
-    "timestamps": false, // Prefixes the raw log message with a timestamp
-    "log_type": false // Prefixes the raw log with the log type (`error` | `out`)
+    "clean": true,        // Strip ANSI color codes (default: false)
+    "json": false,        // Return logs as JSON objects (default: true)
+    "timestamps": false,  // Prefixes the raw log message with a timestamp
+    "log_type": false     // Prefixes the raw log with the log type (`error` | `out`)
   }
 }
 ```
@@ -123,14 +123,15 @@ Response:
     "log_type": false
   }
 }
+```
 
-#### 3. Set Filter
+#### 4. Set Filter
 ```json
 {
   "type": "filter",
   "filter": {
-    "text": "", // simple text filter
-    "regex": "", // custom regex sequence
+    "text": "",       // simple text filter
+    "regex": "",      // custom regex sequence
     "log_type": "all" // "all"` | `"out"` | `"error"
   }
 }
@@ -148,7 +149,7 @@ Response:
 }
 ```
 
-#### 4. Unsubscribe from Process
+#### 5. Unsubscribe from Process
 ```json
 {
   "type": "unsubscribe",
@@ -163,7 +164,7 @@ Unsubscribe from all:
 }
 ```
 
-#### 5. Ping/Pong
+#### 6. Ping/Pong
 ```json
 {
   "type": "ping"
