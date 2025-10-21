@@ -132,7 +132,7 @@ Response:
   "filter": {
     "text": "",       // simple text filter
     "regex": "",      // custom regex sequence
-    "log_type": "all" // "all"` | `"out"` | `"error"
+    "log_type": "all" // "all" | "out" | "error"
   }
 }
 ```
