@@ -1,5 +1,5 @@
 import { EventEmitter } from 'events'
-import { LogEntry, ProcessInfo } from './types'
+import type { LogEntry, Packet, ProcessInfo } from './types'
 
 export class LogManager extends EventEmitter {
   private watchedProcesses: Set<string> = new Set()
@@ -34,7 +34,7 @@ export class LogManager extends EventEmitter {
     console.log(`Unregistered process: ${name}`)
   }
 
-  handleLog(pm_id: number, type: 'out' | 'error', data: string): void {
+  handleLog(pm_id: number, type: 'out' | 'error', data: Packet['data']): void {
     const name = this.processIdToName.get(pm_id)
 
     if (!name || !this.watchedProcesses.has(name)) {

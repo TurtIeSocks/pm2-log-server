@@ -1,20 +1,41 @@
-import express, { Request, Response, NextFunction } from 'express'
 import cors from 'cors'
+import express, { type Request, type Response } from 'express'
+import { createServer, type Server as HTTPServer } from 'http'
+import { WebSocket, WebSocketServer } from 'ws'
 import type { LogManager } from './log-manager'
-import type { PluginConfig, LogEntry, LogClient, LogFilter } from './types'
+import type {
+  ClientOptions,
+  LogEntry,
+  PluginConfig,
+  WebSocketMessage,
+} from './types'
+import { formatLog, shouldIncludeLog, stripAnsi } from './utils'
+
+interface ClientConnection {
+  ws: WebSocket
+  authenticated: boolean
+  subscriptions: Set<string>
+  options: ClientOptions
+}
 
 export class LogServer {
   private app: express.Application
+  private httpServer: HTTPServer
+  private wss: WebSocketServer
   private logManager: LogManager
   private config: PluginConfig
-  private clients: Map<string, Set<LogClient>> = new Map()
+  private clients: Map<WebSocket, ClientConnection> = new Map()
 
   constructor(logManager: LogManager, config: PluginConfig) {
     this.app = express()
+    this.httpServer = createServer(this.app)
+    this.wss = new WebSocketServer({ server: this.httpServer, path: '/ws' })
     this.logManager = logManager
     this.config = config
+
     this.setupMiddleware()
     this.setupRoutes()
+    this.setupWebSocket()
     this.setupLogHandlers()
   }
 
@@ -22,29 +43,31 @@ export class LogServer {
     if (this.config.corsEnabled) {
       this.app.use(cors())
     }
-
     this.app.use(express.json())
 
-    // Auth middleware
-    // if (this.config.authToken) {
-    //   this.app.use((req: Request, res: Response, next: NextFunction) => {
-    //     const token = req.headers.authorization?.replace('Bearer ', '')
-    //     if (token !== this.config.authToken) {
-    //       return res.status(401).json({ error: 'Unauthorized' })
-    //     }
-    //     next()
-    //   })
-    // }
+    this.app.use((req, res, next) => {
+      if (this.config.authToken) {
+        const token = req.headers.authorization?.replace('Bearer ', '')
+        if (token !== this.config.authToken) {
+          return res.status(401).json({ error: 'Unauthorized' })
+        }
+      }
+      next()
+    })
   }
 
   private setupRoutes(): void {
     // Health check
-    this.app.get('/health', (req: Request, res: Response) => {
-      res.json({ status: 'ok', timestamp: new Date().toISOString() })
+    this.app.get('/health', (_req: Request, res: Response) => {
+      res.json({
+        status: 'ok',
+        timestamp: new Date().toISOString(),
+        clients: this.clients.size,
+      })
     })
 
     // List all processes
-    this.app.get('/processes', (req: Request, res: Response) => {
+    this.app.get('/processes', (_req: Request, res: Response) => {
       const processes = this.logManager.getWatchedProcesses()
       res.json({ processes, count: processes.length })
     })
@@ -55,8 +78,10 @@ export class LogServer {
       const count = req.query.count
         ? parseInt(req.query.count as string, 10)
         : undefined
+      const filter = (req.query.filter as 'all' | 'out' | 'error') || 'all'
+      const clean = req.query.clean === 'true'
 
-      const logs = this.logManager.getRecentLogs(name, count)
+      let logs = this.logManager.getRecentLogs(name, count)
 
       if (logs.length === 0) {
         return res.status(404).json({
@@ -65,146 +90,304 @@ export class LogServer {
         })
       }
 
+      // Apply filter
+      if (filter !== 'all') {
+        logs = logs.filter((log) => shouldIncludeLog(log, filter))
+      }
+
+      // Apply clean
+      if (clean) {
+        logs = logs.map((log) => ({
+          ...log,
+          message: stripAnsi(log.message),
+        }))
+      }
+
       res.json({ process: name, logs, count: logs.length })
     })
+  }
 
-    // Stream logs for a process (SSE)
-    this.app.get('/logs/:name', (req, res) => this.handleSSE(req, res))
-    this.app.get('/logs/:name/:filter', (req, res) => this.handleSSE(req, res))
+  private setupWebSocket(): void {
+    this.wss.on('connection', (ws: WebSocket) => {
+      console.log('New WebSocket connection')
 
-    // Stream all logs (SSE)
-    this.app.get('/logs', (req: Request, res: Response) => {
-      res.setHeader('Content-Type', 'text/event-stream')
-      res.setHeader('Cache-Control', 'no-cache')
-      res.setHeader('Connection', 'keep-alive')
+      const client: ClientConnection = {
+        ws,
+        authenticated: !this.config.authToken, // Auto-auth if no token required
+        subscriptions: new Set(),
+        options: {
+          filter: 'all',
+          clean: false,
+          json: true,
+          log_type: false,
+          timestamps: false,
+        },
+      }
 
-      const allProcesses = this.logManager.getWatchedProcesses()
-      const clientEntry: LogClient = { res, filter: 'all' }
-      // const clientId = Math.random().toString(36).substring(7)
+      this.clients.set(ws, client)
 
-      // Add to all process clients
-      allProcesses.forEach((name) => {
-        const processClients = this.clients.get(name) || new Set()
-        processClients.add(clientEntry)
-        this.clients.set(name, processClients)
+      // Send welcome message
+      this.sendMessage(ws, {
+        type: 'connected',
+        message: 'Connected to PM2 Log Streamer',
+        authRequired: !!this.config.authToken,
+        processes: this.logManager.getWatchedProcesses(),
       })
 
-      req.on('close', () => {
-        allProcesses.forEach((name) => {
-          const processClients = this.clients.get(name)
-          if (processClients) {
-            processClients.delete(clientEntry)
-            if (processClients.size === 0) {
-              this.clients.delete(name)
-            }
-          }
-        })
+      ws.on('message', (data: Buffer) => {
+        this.handleMessage(ws, client, data)
       })
 
-      const keepAlive = setInterval(() => {
-        res.write('ping:\n\n')
-      }, 30000)
+      ws.on('close', () => {
+        console.log('WebSocket connection closed')
+        this.clients.delete(ws)
+      })
 
-      req.on('close', () => {
-        clearInterval(keepAlive)
+      ws.on('error', (error: Error) => {
+        console.error('WebSocket error:', error)
+        this.clients.delete(ws)
       })
     })
   }
 
-  private handleSSE(req: Request, res: Response) {
-    const { name, filter: rawFilter } = req.params
-    const processes = this.logManager.getWatchedProcesses()
-    const filter = (rawFilter || 'all') as LogFilter
-    const clientEntry = { res, filter }
+  private handleMessage(
+    ws: WebSocket,
+    client: ClientConnection,
+    data: Buffer,
+  ): void {
+    try {
+      const message: WebSocketMessage = JSON.parse(data.toString())
 
-    if (!processes.includes(name)) {
-      return res.status(404).json({
-        error: 'Process not found',
-        process: name,
+      switch (message.type) {
+        case 'auth':
+          this.handleAuth(ws, client, message)
+          break
+
+        case 'subscribe':
+          this.handleSubscribe(ws, client, message)
+          break
+
+        case 'unsubscribe':
+          this.handleUnsubscribe(ws, client, message)
+          break
+
+        case 'options':
+          this.handleOptions(ws, client, message)
+          break
+
+        case 'ping':
+          this.sendMessage(ws, { type: 'pong' })
+          break
+
+        default:
+          this.sendMessage(ws, {
+            type: 'error',
+            message: 'Unknown message type',
+          })
+      }
+    } catch (error) {
+      console.error(error)
+      this.sendMessage(ws, {
+        type: 'error',
+        message: 'Invalid message format',
+      })
+    }
+  }
+
+  private handleAuth(
+    ws: WebSocket,
+    client: ClientConnection,
+    message: WebSocketMessage,
+  ): void {
+    if (!this.config.authToken) {
+      this.sendMessage(ws, {
+        type: 'error',
+        message: 'Authentication not required',
+      })
+      return
+    }
+
+    if (message.token === this.config.authToken) {
+      client.authenticated = true
+      this.sendMessage(ws, {
+        type: 'authenticated',
+        message: 'Authentication successful',
+      })
+    } else {
+      this.sendMessage(ws, {
+        type: 'error',
+        message: 'Invalid authentication token',
+      })
+      ws.close(1008, 'Unauthorized')
+    }
+  }
+
+  private handleSubscribe(
+    ws: WebSocket,
+    client: ClientConnection,
+    message: WebSocketMessage,
+  ): void {
+    if (!client.authenticated) {
+      this.sendMessage(ws, {
+        type: 'error',
+        message: 'Not authenticated',
+      })
+      return
+    }
+
+    const processName = message.process
+
+    if (!processName) {
+      this.sendMessage(ws, {
+        type: 'error',
+        message: 'Process name required',
+      })
+      return
+    }
+
+    // Check if process exists
+    const processes = this.logManager.getWatchedProcesses()
+
+    if (processName !== '*' && !processes.includes(processName)) {
+      this.sendMessage(ws, {
+        type: 'error',
+        message: `Process "${processName}" not found`,
         available: processes,
       })
+      return
     }
 
-    // Check max clients
-    const processClients = this.clients.get(name) || new Set()
-    if (processClients.size >= this.config.maxClients) {
-      return res.status(503).json({
-        error: 'Maximum clients reached for this process',
-        maxClients: this.config.maxClients,
+    // Subscribe to process or all processes
+    if (processName === '*') {
+      processes.forEach((p) => client.subscriptions.add(p))
+    } else {
+      client.subscriptions.add(processName)
+    }
+
+    this.sendMessage(ws, {
+      type: 'subscribed',
+      process: processName,
+      subscriptions: Array.from(client.subscriptions),
+    })
+
+    // Send recent logs for subscribed process(es)
+    const targets = processName === '*' ? processes : [processName]
+    targets.forEach((target) => {
+      const recentLogs = this.logManager.getRecentLogs(target, 20)
+      recentLogs.forEach((log) => {
+        this.sendLog(ws, client, log)
+      })
+    })
+  }
+
+  private handleUnsubscribe(
+    ws: WebSocket,
+    client: ClientConnection,
+    message: WebSocketMessage,
+  ): void {
+    if (!client.authenticated) {
+      this.sendMessage(ws, {
+        type: 'error',
+        message: 'Not authenticated',
+      })
+      return
+    }
+
+    const processName = message.process
+
+    if (!processName) {
+      // Unsubscribe from all
+      client.subscriptions.clear()
+      this.sendMessage(ws, {
+        type: 'unsubscribed',
+        message: 'Unsubscribed from all processes',
+      })
+      return
+    }
+
+    if (processName === '*') {
+      client.subscriptions.clear()
+    } else {
+      client.subscriptions.delete(processName)
+    }
+
+    this.sendMessage(ws, {
+      type: 'unsubscribed',
+      process: processName,
+      subscriptions: Array.from(client.subscriptions),
+    })
+  }
+
+  private handleOptions(
+    ws: WebSocket,
+    client: ClientConnection,
+    message: WebSocketMessage,
+  ): void {
+    if (!client.authenticated) {
+      this.sendMessage(ws, {
+        type: 'error',
+        message: 'Not authenticated',
+      })
+      return
+    }
+
+    if (message.options) {
+      client.options = { ...client.options, ...message.options }
+      this.sendMessage(ws, {
+        type: 'options_updated',
+        options: client.options,
       })
     }
-
-    // Setup SSE
-    res.setHeader('Content-Type', 'text/event-stream')
-    res.setHeader('Cache-Control', 'no-cache')
-    res.setHeader('Connection', 'keep-alive')
-
-    // Send recent logs first
-    const recentLogs = this.logManager.getRecentLogs(name, 50)
-    recentLogs.forEach((log) => this.sendSSE(clientEntry, log))
-
-    // Add client to set
-    processClients.add(clientEntry)
-    this.clients.set(name, processClients)
-
-    // Handle client disconnect
-    req.on('close', () => {
-      processClients.delete(clientEntry)
-      if (processClients.size === 0) {
-        this.clients.delete(name)
-      }
-    })
-
-    // Keep alive ping every 30 seconds
-    const keepAlive = setInterval(() => {
-      res.write(':ping\n\n')
-    }, 30000)
-
-    req.on('close', () => {
-      clearInterval(keepAlive)
-    })
   }
 
   private setupLogHandlers(): void {
     this.logManager.on('log', (name: string, entry: LogEntry) => {
-      const clients = this.clients.get(name)
-      if (clients) {
-        clients.forEach((client) => {
-          this.sendSSE(client, entry)
-        })
-      }
+      this.clients.forEach((client, ws) => {
+        if (client.authenticated && client.subscriptions.has(name)) {
+          this.sendLog(ws, client, entry)
+        }
+      })
     })
   }
 
-  private sendSSE(client: LogClient, entry: LogEntry): void {
-    if (client.filter !== 'all' && client.filter !== entry.type) {
+  private sendLog(
+    ws: WebSocket,
+    client: ClientConnection,
+    entry: LogEntry,
+  ): void {
+    if (!shouldIncludeLog(entry, client.options.filter)) {
       return
     }
 
-    const data = this.config.includeTimestamp
-      ? `[${entry.timestamp}] [${entry.type}] ${entry.message}`
-      : `[${entry.type}] ${entry.message}`
+    const formatted = formatLog(entry, client.options)
 
-    client.res.write(
-      `data: ${JSON.stringify({ ...entry, formatted: data })}\n\n`
-    )
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(formatted)
+    }
+  }
+
+  private sendMessage<T extends { type: string }>(
+    ws: WebSocket,
+    message: T,
+  ): void {
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(message))
+    }
   }
 
   start(): Promise<void> {
     return new Promise((resolve) => {
-      this.app.listen(this.config.port, this.config.host, () => {
+      this.httpServer.listen(this.config.port, this.config.host, () => {
         console.log(
-          `PM2 Log Streamer running on http://${this.config.host}:${this.config.port}`
+          `PM2 Log Streamer running on http://${this.config.host}:${this.config.port}`,
         )
-        console.log(`Endpoints:`)
+        console.log(
+          `WebSocket endpoint: ws://${this.config.host}:${this.config.port}/ws`,
+        )
+        console.log(`HTTP Endpoints:`)
         console.log(`  GET /health - Health check`)
         console.log(`  GET /processes - List watched processes`)
-        console.log(`  GET /logs/:name - Stream logs for a process (SSE)`)
-        console.log(
-          `  GET /logs/:name/:filter - Stream logs for a process (SSE) with a filter ('all' | 'out' | 'error')`
-        )
         console.log(`  GET /logs/:name/recent - Get recent logs (JSON)`)
-        console.log(`  GET /logs - Stream all logs (SSE)`)
         resolve()
       })
     })

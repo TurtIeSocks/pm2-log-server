@@ -1,42 +1,48 @@
 {
   "name": "pm2-log-streamer",
   "version": "1.0.0",
-  "description": "PM2 plugin for streaming application logs via HTTP",
+  "description": "PM2 plugin for streaming application logs via WS",
+  "keywords": [
+    "pm2",
+    "plugin",
+    "logs",
+    "streaming",
+    "websocket"
+  ],
+  "license": "MIT",
+  "author": "TurtIeSocks <58572875+TurtIeSocks@users.noreply.github.com>",
   "main": "dist/index.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/TurtIeSocks/pm2-logs-server.git"
+  },
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
     "start": "node dist/index.js"
   },
-  "keywords": [
-    "pm2",
-    "plugin",
-    "logs",
-    "streaming"
-  ],
-  "author": "",
-  "license": "MIT",
+  "config": {
+    "authToken": "",
+    "corsEnabled": false,
+    "host": "0.0.0.0",
+    "logBufferSize": 100,
+    "port": 9615
+  },
   "dependencies": {
     "@pm2/io": "6.1.0",
-    "pm2": "6.0.13",
-    "express": "5.1.0",
+    "ansi-regex": "6.2.2",
     "cors": "2.8.5",
+    "express": "5.1.0",
+    "pm2": "6.0.13",
     "ws": "8.18.3"
   },
   "devDependencies": {
-    "@types/node": "24.7.1",
-    "@types/express": "5.0.3",
+    "@biomejs/biome": "2.2.6",
     "@types/cors": "2.8.19",
+    "@types/express": "5.0.3",
+    "@types/node": "24.9.1",
     "@types/ws": "8.18.1",
     "typescript": "5.9.3"
-  },
-  "config": {
-    "port": 9615,
-    "host": "0.0.0.0",
-    "corsEnabled": false,
-    "maxClients": 50,
-    "logBufferSize": 100,
-    "includeTimestamp": true
   },
   "apps": [
     {
