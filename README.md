@@ -36,16 +36,7 @@ A PM2 plugin that streams application logs via WebSocket using the native PM2 bu
 ## Installation
 
 ```bash
-npm install
-npm run build
-```
-
-## Usage
-
-### Start with PM2
-
-```bash
-pm2 start ecosystem.config.js
+pm2 install pm2-log-server
 ```
 
 ## Configuration
@@ -108,35 +99,51 @@ Response:
 }
 ```
 
-#### 3. Set Options
+#### 3. Set Format
 ```json
 {
-  "type": "options",
-  "options": {
-    "filter": "error",
-    "clean": true,
-    "json": false
+  "type": "format",
+  "format": {
+    "clean": true, // Strip ANSI color codes (default: false)
+    "json": false, // Return logs as JSON objects (default: true)
+    "timestamps": false, // Prefixes the raw log message with a timestamp
+    "log_type": false // Prefixes the raw log with the log type (`error` | `out`)
   }
 }
 ```
 
-Options:
-- `filter`: `"all"` | `"out"` | `"error"` - Filter logs by type (default: "all")
-- `clean`: `boolean` - Strip ANSI color codes (default: false)
-- `json`: `boolean` - Return logs as JSON objects (default: true)
-- `timestamps`: `boolean` - Prefixes the raw log message with a timestamp
-- `log_type`: `boolean` - Prefixes the raw log with the log type (`error` | `out`)
-
 Response:
 ```json
 {
-  "type": "options_updated",
-  "options": {
-    "filter": "error",
+  "type": "format_updated",
+  "format": {
     "clean": true,
     "json": false,
     "timestamps": false,
     "log_type": false
+  }
+}
+
+#### 3. Set Filter
+```json
+{
+  "type": "filter",
+  "filter": {
+    "text": "", // simple text filter
+    "regex": "", // custom regex sequence
+    "log_type": "all" // "all"` | `"out"` | `"error"
+  }
+}
+```
+
+Response:
+```json
+{
+  "type": "filter_updated",
+  "filter": {
+    "text": "",
+    "regex": "",
+    "log_type": "all"
   }
 }
 ```

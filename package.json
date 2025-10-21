@@ -1,6 +1,6 @@
 {
   "name": "pm2-log-server",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "PM2 plugin for streaming application logs via WS",
   "keywords": [
     "pm2",
